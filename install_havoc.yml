@@ -1,0 +1,84 @@
+
+---
+- name: Install and build Havoc C2
+  hosts: havoc_servers
+  become: true
+
+  vars:
+    havoc_user: "{{ ansible_user_id }}"
+    havoc_dir: "/opt/havoc"
+    havoc_repo: "https://github.com/HavocFramework/Havoc.git"
+
+  tasks:
+    - name: Verify Ubuntu 24.04
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_version is version('24.04', '>=')
+          - ansible_distribution_version is version('24.10', '<')
+        fail_msg: "This playbook targets Ubuntu 24.04 LTS."
+
+    - name: Update APT cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install build dependencies
+      ansible.builtin.apt:
+        name:
+          - git
+          - build-essential
+          - cmake
+          - make
+          - python3
+          - python3-pip
+          - python3-dev
+          - golang-go
+          - libfontconfig1
+          - libglu1-mesa-dev
+          - libgtest-dev
+          - libspdlog-dev
+          - libboost-all-dev
+          - libssl-dev
+          - libsqlite3-dev
+          - libffi-dev
+          - qtbase5-dev
+          - qt5-qmake
+          - qtbase5-dev-tools
+          - libqt5websockets5-dev
+          - qtdeclarative5-dev
+          - mingw-w64
+          - nasm
+        state: present
+
+    - name: Clone Havoc repository
+      ansible.builtin.git:
+        repo: "{{ havoc_repo }}"
+        dest: "{{ havoc_dir }}"
+        version: main
+        update: false
+        recursive: true
+
+    - name: Download Go modules
+      ansible.builtin.command:
+        cmd: go mod download
+        chdir: "{{ havoc_dir }}/teamserver"
+      changed_when: false
+
+    - name: Build Havoc teamserver
+      ansible.builtin.command:
+        cmd: make ts-build
+        chdir: "{{ havoc_dir }}"
+      args:
+        creates: "{{ havoc_dir }}/havoc"
+
+    - name: Build Havoc graphical client
+      ansible.builtin.command:
+        cmd: make client-build
+        chdir: "{{ havoc_dir }}"
+      args:
+        creates: "{{ havoc_dir }}/client/Havoc"
+
+    - name: Display installation location
+      ansible.builtin.debug:
+        msg: "Havoc build completed in {{ havoc_dir }}. Review build output and configuration before starting."
